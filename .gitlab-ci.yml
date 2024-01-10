@@ -1,0 +1,63 @@
+# merge request   => data-nonprod-dev
+# develop branch  => data-nonprod-staging
+# main branch     => data-prod
+
+include:
+  - template: Terraform/Base.gitlab-ci.yml
+  - project: cda-devsecops/projects_templates/ci_template/amazon-ci-template
+    ref: "1.2"
+    file: .amazon_s3.yml
+
+default:
+  tags:
+    - kubernetes
+
+variables:
+  TF_VAR_repo_url: "${CI_PROJECT_URL}"    # Used by tf_deploy to tag resources.
+  AWS_ACCOUNT_ID_DEV: ""      # Used by s3_upload_dir:dev. AWS account ID for dev environment.
+  AWS_ACCOUNT_ID_STAGING: ""  # Used by s3_upload_dir:staging. AWS account ID for staging environment.
+  AWS_ACCOUNT_ID_PROD: ""     # Used by s3_upload_dir:prod. AWS account ID for prod environment.
+  DAGS_BUCKET_NAME_DEV: "mwaa-data-dev"          # Used by s3_upload_dir:dev. Bucket name for dev environment.
+  DAGS_BUCKET_NAME_STAGING: "mwaa-data-staging"  # Used by s3_upload_dir:staging. Bucket name for staging environment.
+  DAGS_BUCKET_NAME_PROD: "mwaa-data-prod"        # Used by s3_upload_dir:prod. Bucket name for prod environment.
+  DAGS_SOURCE_DIR: "src"                                                   # Used by s3_upload_dir:*. Relative path to src folder.
+  DAGS_BUCKET_PATH: "dags/${CI_PROJECT_NAME}"                               # Used by s3_upload_dir:*. Path on the S3 bucket to store $SOURCE_DIR content
+
+stages:
+  - deploy
+
+s3_upload_dir:dev:
+  extends: .s3:upload_dir
+  cache: {}
+  variables:
+    AWS_ACCOUNT_ID: $AWS_ACCOUNT_ID_DEV
+    BUCKET_NAME: $DAGS_BUCKET_NAME_DEV
+    BUCKET_PATH: $DAGS_BUCKET_PATH
+    SOURCE_DIR: $DAGS_SOURCE_DIR
+  rules:
+    - if: ($CI_MERGE_REQUEST_ID && $CI_MERGE_REQUEST_TITLE =~ /^debug*./i)
+    - if: ($CI_MERGE_REQUEST_ID && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop")
+
+s3_upload_dir:staging:
+  extends: .s3:upload_dir
+  cache: {}
+  variables:
+    AWS_ACCOUNT_ID: $AWS_ACCOUNT_ID_STAGING
+    BUCKET_NAME: $DAGS_BUCKET_NAME_STAGING
+    BUCKET_PATH: $DAGS_BUCKET_PATH
+    SOURCE_DIR: $DAGS_SOURCE_DIR
+  rules:
+    - if: ($CI_MERGE_REQUEST_ID && $CI_MERGE_REQUEST_TITLE =~ /^debug*./i)
+    - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop")
+
+s3_upload_dir:prod:
+  extends: .s3:upload_dir
+  cache: {}
+  variables:
+    AWS_ACCOUNT_ID: $AWS_ACCOUNT_ID_PROD
+    BUCKET_NAME: $DAGS_BUCKET_NAME_PROD
+    BUCKET_PATH: $DAGS_BUCKET_PATH
+    SOURCE_DIR: $DAGS_SOURCE_DIR
+  rules:
+    - if: ($CI_MERGE_REQUEST_ID && $CI_MERGE_REQUEST_TITLE =~ /^debug*./i)
+    - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
